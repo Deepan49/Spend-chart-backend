@@ -72,12 +72,13 @@ exports.login = async (req, res) => {
 
 
 exports.sendOTP = async (req, res) => {
-  const { email } = req.body;
-  console.log(`[AUTH] sendOTP requested for: ${email}`);
+  const { email, phone } = req.body;
+  console.log(`[AUTH] sendOTP requested for: ${email || phone}`);
   try {
-    const user = await User.findOne({ email });
+    const query = email ? { email } : { phone };
+    const user = await User.findOne(query);
     if (!user) {
-      console.log(`[AUTH] sendOTP failed: User not found for ${email}`);
+      console.log(`[AUTH] sendOTP failed: User not found for ${email || phone}`);
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
