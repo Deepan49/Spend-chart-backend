@@ -1,31 +1,34 @@
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // Use TLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+const axios = require('axios');
 
 exports.sendOTP = async (email, otp) => {
-  console.log(`[MAILER] Attempting to send OTP to: ${email}`);
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'Your SD-Track Verification Code',
-    text: `Your verification code is: ${otp}. It expires in 10 minutes.`,
-    html: `<h3>SD-Track Security</h3><p>Your verification code is: <b>${otp}</b></p><p>This code expires in 10 minutes.</p>`,
-  };
+  console.log(`[MAILER] Attempting to send OTP via Resend to: ${email}`);
+  
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[MAILER] RESEND_API_KEY is missing!');
+    throw new Error('Email service configuration missing');
+  }
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`[MAILER] Email sent successfully: ${info.response}`);
-    return info;
+    const response = await axios.post(
+      'https://api.resend.com/emails',
+      {
+        from: 'Spend Chart <onboarding@resend.dev>',
+        to: email,
+        subject: 'Your Verification Code',
+        html: `<h3>Security Code</h3><p>Your verification code is: <b>${otp}</b></p>`,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    console.log(`[MAILER] Email sent successfully via Resend: ${response.data.id}`);
+    return response.data;
   } catch (error) {
-    console.error(`[MAILER] Error sending email: ${error.message}`);
+    console.error(`[MAILER] Resend API error: ${error.response?.data?.message || error.message}`);
     throw error;
   }
 };
