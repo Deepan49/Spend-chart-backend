@@ -1,6 +1,8 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
+const mailer = require('../utils/mailer');
+
 exports.register = async (req, res) => {
   try {
     const { name, email, password, phone } = req.body;
@@ -11,12 +13,30 @@ exports.register = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User already exists with this email or phone' });
     }
 
+    // Create user
     const user = new User({ name, email, password, phone });
-    await user.save();
     
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 mins
+    
+    await user.save();
+
+    // Send OTP via Email
+    try {
+      await mailer.sendOTP(user.email, otp);
+      console.log(`[AUTH] OTP ${otp} sent to ${email}`);
+    } catch (mailError) {
+      console.error('[AUTH] Email sending failed during registration:', mailError.message);
+    }
+
+    // Mock WhatsApp (Console log for now)
+    console.log(`[WHATSAPP] To ${user.phone}: Your registration code is ${otp}`);
+
     res.status(201).json({ 
       success: true, 
-      message: 'Registration successful. Please verify your phone.' 
+      message: 'Registration successful. OTP sent to your email and WhatsApp.' 
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -49,7 +69,7 @@ exports.login = async (req, res) => {
   }
 };
 
-const mailer = require('../utils/mailer');
+
 
 exports.sendOTP = async (req, res) => {
   const { email } = req.body;
@@ -138,6 +158,55 @@ exports.updateProfile = async (req, res) => {
         isVerified: user.isVerified
       } 
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 mins
+    await user.save();
+
+    try {
+      await mailer.sendOTP(user.email, otp);
+    } catch (mailError) {
+      console.error('[AUTH] Forgot password email failed:', mailError.message);
+    }
+
+    res.json({ success: true, message: 'Password reset OTP sent to your email' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    const user = await User.findOne({ 
+      email, 
+      otp, 
+      otpExpires: { $gt: Date.now() } 
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+
+    user.password = newPassword;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    res.json({ success: true, message: 'Password has been reset successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
