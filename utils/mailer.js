@@ -1,34 +1,46 @@
-const axios = require('axios');
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+  // Extra settings to help with Render timeouts
+  connectionTimeout: 10000, 
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+});
 
 exports.sendOTP = async (email, otp) => {
-  console.log(`[MAILER] Attempting to send OTP via Resend to: ${email}`);
+  console.log(`[MAILER] Attempting to send branded Gmail OTP to: ${email}`);
   
-  if (!process.env.RESEND_API_KEY) {
-    console.error('[MAILER] RESEND_API_KEY is missing!');
-    throw new Error('Email service configuration missing');
-  }
+  const mailOptions = {
+    from: `"Spend Chart" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: `[Spend Chart] ${otp} is your verification code`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 400px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #00008B; text-align: center;">Spend Chart</h2>
+        <hr style="border: 0; border-top: 1px solid #eee;">
+        <p>Hello,</p>
+        <p>Use the following code to verify your account. It will expire in 10 minutes.</p>
+        <div style="background: #f4f4f4; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #00008B;">
+          ${otp}
+        </div>
+        <p style="font-size: 12px; color: #888; text-align: center; margin-top: 30px;">
+          If you didn't request this, please ignore this email.
+        </p>
+      </div>
+    `,
+  };
 
   try {
-    const response = await axios.post(
-      'https://api.resend.com/emails',
-      {
-        from: 'Spend Chart <onboarding@resend.dev>',
-        to: email,
-        subject: 'Your Verification Code',
-        html: `<h3>Security Code</h3><p>Your verification code is: <b>${otp}</b></p>`,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    console.log(`[MAILER] Email sent successfully via Resend: ${response.data.id}`);
-    return response.data;
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[MAILER] Branded Gmail sent: ${info.response}`);
+    return info;
   } catch (error) {
-    console.error(`[MAILER] Resend API error: ${error.response?.data?.message || error.message}`);
+    console.error(`[MAILER] Gmail error: ${error.message}`);
     throw error;
   }
 };
