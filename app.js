@@ -1,15 +1,15 @@
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-
 const mongoose = require('mongoose');
+
 const stockRoutes = require('./routes/stockRoutes');
 const authRoutes = require('./routes/authRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const portfolioRoutes = require('./routes/portfolioRoutes');
-
-const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 app.use(cors());
