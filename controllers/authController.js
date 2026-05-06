@@ -174,11 +174,10 @@ exports.forgotPassword = async (req, res) => {
     user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 mins
     await user.save();
 
-    try {
-      await mailer.sendOTP(user.email, otp);
-    } catch (mailError) {
-      console.error('[AUTH] Forgot password email failed:', mailError.message);
-    }
+    // Send OTP via Email (Non-blocking)
+    mailer.sendOTP(user.email, otp).catch(err => {
+      console.error('[AUTH] Forgot password email failed:', err.message);
+    });
 
     res.json({ success: true, message: 'Password reset OTP sent to your email' });
   } catch (err) {
