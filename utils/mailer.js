@@ -12,10 +12,10 @@ exports.sendOTP = async (email, otp) => {
     const response = await axios.post(
       'https://api.resend.com/emails',
       {
-        from: 'SD-Track <onboarding@resend.dev>',
+        from: 'Spend Chart <onboarding@resend.dev>',
         to: [email],
-        subject: 'Your SD-Track Verification Code',
-        html: `<h3>SD-Track Security</h3><p>Your verification code is: <b>${otp}</b></p><p>This code expires in 10 minutes.</p>`,
+        subject: 'Your Spend Chart Verification Code',
+        html: `<h3>Spend Chart Security</h3><p>Your verification code is: <b>${otp}</b></p><p>This code expires in 10 minutes.</p>`,
       },
       {
         headers: {
