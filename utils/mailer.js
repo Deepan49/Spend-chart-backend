@@ -1,11 +1,17 @@
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // Use SSL
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // This should be an "App Password"
+    pass: process.env.EMAIL_PASS,
   },
+  tls: {
+    // This forces the connection to use IPv4
+    rejectUnauthorized: false
+  }
 });
 
 exports.sendOTP = async (email, otp) => {

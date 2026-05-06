@@ -23,20 +23,17 @@ exports.register = async (req, res) => {
     
     await user.save();
 
-    // Send OTP via Email
-    try {
-      await mailer.sendOTP(user.email, otp);
-      console.log(`[AUTH] OTP ${otp} sent to ${email}`);
-    } catch (mailError) {
-      console.error('[AUTH] Email sending failed during registration:', mailError.message);
-    }
+    // Send OTP via Email (Non-blocking)
+    mailer.sendOTP(user.email, otp).catch(err => {
+      console.error('[AUTH] Email sending failed:', err.message);
+    });
 
     // Mock WhatsApp (Console log for now)
     console.log(`[WHATSAPP] To ${user.phone}: Your registration code is ${otp}`);
 
     res.status(201).json({ 
       success: true, 
-      message: 'Registration successful. OTP sent to your email and WhatsApp.' 
+      message: 'Registration successful. OTP sent to your email.' 
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
