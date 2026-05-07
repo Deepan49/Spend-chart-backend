@@ -194,6 +194,9 @@ exports.resetPassword = async (req, res) => {
 exports.googleLogin = async (req, res) => {
   try {
     const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ success: false, message: 'ID Token is missing from request' });
+    }
     
     // Verify token with Google
     const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
