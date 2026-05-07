@@ -193,15 +193,35 @@ exports.resetPassword = async (req, res) => {
 
 exports.googleLogin = async (req, res) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ success: false, message: 'ID Token is missing from request' });
-    }
+    const { idToken, accessToken } = req.body;
     
-    // Verify token with Google
-    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    const { sub: googleId, email, name, picture } = response.data;
+    if (!idToken && !accessToken) {
+      return res.status(400).json({ success: false, message: 'No token provided' });
+    }
 
+    let userData;
+
+    if (idToken) {
+      // Verify ID Token
+      const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+      userData = {
+        googleId: response.data.sub,
+        email: response.data.email,
+        name: response.data.name,
+        picture: response.data.picture
+      };
+    } else {
+      // Fallback: Verify Access Token
+      const response = await axios.get(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`);
+      userData = {
+        googleId: response.data.sub,
+        email: response.data.email,
+        name: response.data.name,
+        picture: response.data.picture
+      };
+    }
+
+    const { googleId, email, name, picture } = userData;
     let user = await User.findOne({ email });
 
     if (!user) {
