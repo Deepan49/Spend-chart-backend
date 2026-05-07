@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const mailer = require('../utils/mailer');
+const axios = require('axios');
 
 exports.register = async (req, res) => {
   try {
@@ -189,3 +190,91 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+exports.googleLogin = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    
+    // Verify token with Google
+    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    const { sub: googleId, email, name, picture } = response.data;
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = new User({
+        name,
+        email,
+        googleId,
+        profilePicture: picture,
+        isVerified: true
+      });
+      await user.save();
+    } else {
+      // Update googleId if not present
+      if (!user.googleId) {
+        user.googleId = googleId;
+        if (!user.profilePicture) user.profilePicture = picture;
+        await user.save();
+      }
+    }
+
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        profilePicture: user.profilePicture,
+        isVerified: user.isVerified
+      }
+    });
+  } catch (err) {
+    res.status(401).json({ success: false, message: 'Google authentication failed: ' + err.message });
+  }
+};
+
+exports.appleLogin = async (req, res) => {
+  try {
+    const { identityToken, userIdentifier, email, name } = req.body;
+    
+    // In a real production app, verify the identityToken with Apple's public keys.
+    
+    let user = await User.findOne({ $or: [{ appleId: userIdentifier }, { email }] });
+
+    if (!user) {
+      user = new User({
+        name: name || 'Apple User',
+        email,
+        appleId: userIdentifier,
+        isVerified: true
+      });
+      await user.save();
+    } else {
+      if (!user.appleId) {
+        user.appleId = userIdentifier;
+        await user.save();
+      }
+    }
+
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        profilePicture: user.profilePicture,
+        isVerified: user.isVerified
+      }
+    });
+  } catch (err) {
+    res.status(401).json({ success: false, message: 'Apple authentication failed: ' + err.message });
+  }
+};
+

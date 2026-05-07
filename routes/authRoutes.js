@@ -9,6 +9,8 @@ router.post('/send-otp', authController.sendOTP);
 router.post('/verify-otp', authController.verifyOTP);
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
+router.post('/google-login', authController.googleLogin);
+router.post('/apple-login', authController.appleLogin);
 router.put('/profile', authMiddleware, authController.updateProfile);
 
 module.exports = router;
