@@ -8,7 +8,6 @@ const userSchema = new mongoose.Schema({
   phone: { type: String }, // Optional for social login
   profilePicture: { type: String },
   googleId: { type: String },
-  appleId: { type: String },
   isVerified: { type: Boolean, default: false },
   otp: { type: String },
   otpExpires: { type: Date }
