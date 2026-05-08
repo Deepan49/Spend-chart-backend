@@ -260,7 +260,3 @@ exports.googleLogin = async (req, res) => {
   }
 };
 
-    res.status(401).json({ success: false, message: 'Google authentication failed: ' + err.message });
-  }
-};
-

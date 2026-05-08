@@ -77,3 +77,19 @@ exports.deleteExpense = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.batchDeleteExpenses = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) {
+      return res.status(400).json({ success: false, message: 'IDs must be an array' });
+    }
+    const result = await Expense.deleteMany({
+      _id: { $in: ids },
+      userId: req.user.userId
+    });
+    res.json({ success: true, count: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
