@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Holding = require('../models/Holding');
 const stockService = require('../services/stockService');
 
@@ -64,5 +65,57 @@ exports.addHolding = async (req, res) => {
     res.status(201).json(holding);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+};
+
+exports.updateHolding = async (req, res) => {
+  try {
+    const { shares, avgPrice, symbol } = req.body;
+    let holding;
+    
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      holding = await Holding.findOne({ _id: req.params.id, userId: req.user.userId });
+    }
+    
+    if (!holding && symbol) {
+      holding = await Holding.findOne({ symbol, userId: req.user.userId });
+    }
+    if (!holding && req.params.id) {
+      holding = await Holding.findOne({ symbol: req.params.id, userId: req.user.userId });
+    }
+
+    if (!holding) {
+      return res.status(404).json({ success: false, message: 'Holding not found' });
+    }
+
+    if (shares !== undefined) holding.shares = shares;
+    if (avgPrice !== undefined) holding.avgPrice = avgPrice;
+    if (symbol !== undefined) holding.symbol = symbol;
+
+    await holding.save();
+    res.json({ success: true, holding });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+exports.deleteHolding = async (req, res) => {
+  try {
+    let holding;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      holding = await Holding.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+    }
+    
+    if (!holding) {
+      holding = await Holding.findOneAndDelete({ symbol: req.params.id, userId: req.user.userId });
+    }
+
+    if (!holding) {
+      return res.status(404).json({ success: false, message: 'Holding not found' });
+    }
+
+    res.json({ success: true, message: 'Holding deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };

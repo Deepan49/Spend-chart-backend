@@ -9,6 +9,7 @@ router.post('/', auth, expenseController.addExpense);
 router.post('/batch', auth, expenseController.batchAddExpenses);
 router.post('/import', auth, expenseController.importStatement);
 router.delete('/:id', auth, expenseController.deleteExpense);
+router.patch('/:id', auth, expenseController.updateExpense);
 router.post('/batch-delete', auth, expenseController.batchDeleteExpenses);
 
 module.exports = router;

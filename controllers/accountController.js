@@ -12,13 +12,16 @@ exports.getAccounts = async (req, res) => {
 
 exports.createAccount = async (req, res) => {
   try {
-    const { name, type, balance, currency } = req.body;
+    const { name, type, balance, currency, startingBalance, creditLimit, dueDate } = req.body;
     const account = new Account({
       userId: req.user.userId,
       name,
       type,
       balance: balance || 0,
-      currency: currency || 'USD'
+      currency: currency || 'USD',
+      startingBalance: startingBalance || 0,
+      creditLimit,
+      dueDate
     });
     await account.save();
     res.status(201).json({ success: true, account });
@@ -29,7 +32,7 @@ exports.createAccount = async (req, res) => {
 
 exports.updateAccount = async (req, res) => {
   try {
-    const { name, type, balance, currency } = req.body;
+    const { name, type, balance, currency, startingBalance, creditLimit, dueDate } = req.body;
     const account = await Account.findOne({ _id: req.params.id, userId: req.user.userId });
     if (!account) {
       return res.status(404).json({ success: false, message: 'Account not found' });
@@ -39,6 +42,9 @@ exports.updateAccount = async (req, res) => {
     if (type !== undefined) account.type = type;
     if (balance !== undefined) account.balance = balance;
     if (currency !== undefined) account.currency = currency;
+    if (startingBalance !== undefined) account.startingBalance = startingBalance;
+    if (creditLimit !== undefined) account.creditLimit = creditLimit;
+    if (dueDate !== undefined) account.dueDate = dueDate;
 
     await account.save();
     res.json({ success: true, account });

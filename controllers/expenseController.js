@@ -226,3 +226,50 @@ exports.importStatement = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+exports.updateExpense = async (req, res) => {
+  try {
+    const expense = await Expense.findOne({ _id: req.params.id, userId: req.user.userId });
+    if (!expense) {
+      return res.status(404).json({ success: false, message: 'Expense not found' });
+    }
+
+    const oldAmount = expense.amount;
+    const oldAccountId = expense.accountId;
+    const oldType = expense.type;
+
+    // Apply updates
+    Object.assign(expense, req.body);
+    expense.userId = req.user.userId; // ensure userId cannot be changed
+    await expense.save();
+
+    // Recalculate account balances if amount, accountId, or type changed
+    if (
+      req.body.amount !== undefined ||
+      req.body.accountId !== undefined ||
+      req.body.type !== undefined
+    ) {
+      // 1. Reverse the old transaction balance change from the old account
+      if (oldAccountId) {
+        const reverseChange = oldType === 'income' ? -oldAmount : oldAmount;
+        await Account.findOneAndUpdate(
+          { _id: oldAccountId, userId: req.user.userId },
+          { $inc: { balance: reverseChange } }
+        );
+      }
+
+      // 2. Apply the new transaction balance change to the new account
+      if (expense.accountId) {
+        const newChange = expense.type === 'income' ? expense.amount : -expense.amount;
+        await Account.findOneAndUpdate(
+          { _id: expense.accountId, userId: req.user.userId },
+          { $inc: { balance: newChange } }
+        );
+      }
+    }
+
+    res.json({ success: true, expense });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};

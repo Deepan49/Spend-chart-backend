@@ -9,6 +9,8 @@ const accountController = require('../controllers/accountController');
 const budgetController = require('../controllers/budgetController');
 const expenseController = require('../controllers/expenseController');
 const analyticsController = require('../controllers/analyticsController');
+const subscriptionController = require('../controllers/subscriptionController');
+const Subscription = require('../models/Subscription');
 
 // Mock req and res objects
 const createMockReq = (userId, body = {}, query = {}, params = {}) => ({
@@ -81,6 +83,29 @@ async function runTests() {
       console.log(`Success: Created account "${testAccount.name}" with balance $${testAccount.balance}`);
     } else {
       throw new Error(`Failed to create account: ${JSON.stringify(accRes.jsonData)}`);
+    }
+
+    // 2.5. Test Account Update with credit card properties
+    console.log('\n--- 2.5. Testing Account Update and Credit Card Fields ---');
+    const updateAccReq = createMockReq(userId, {
+      name: 'Chase Checking Updated',
+      type: 'credit_card',
+      balance: 1000,
+      startingBalance: 100,
+      creditLimit: 5000,
+      dueDate: 15
+    }, {}, { id: testAccount._id.toString() });
+    const updateAccRes = createMockRes();
+    await accountController.updateAccount(updateAccReq, updateAccRes);
+
+    if (updateAccRes.statusCode === 200 && updateAccRes.jsonData.success) {
+      const updatedAcc = updateAccRes.jsonData.account;
+      console.log(`Success: Updated account type to "${updatedAcc.type}", creditLimit: ${updatedAcc.creditLimit}, dueDate: ${updatedAcc.dueDate}`);
+      if (updatedAcc.dueDate !== 15 || updatedAcc.type !== 'credit_card') {
+        throw new Error('Failed to update account fields!');
+      }
+    } else {
+      throw new Error(`Failed to update account: ${JSON.stringify(updateAccRes.jsonData)}`);
     }
 
     // 3. Test Budget Creation
@@ -222,6 +247,166 @@ async function runTests() {
       throw new Error(`Failed search: ${JSON.stringify(searchRes.jsonData)}`);
     }
 
+    // 8.5. Test Subscription Cloud Sync & Auto Payments
+    console.log('\n--- 8.5. Testing Subscription Cloud Sync & Auto Payments ---');
+    const subCreateReq = createMockReq(userId, {
+      title: 'Netflix Premium',
+      amount: 649,
+      frequency: 'Monthly',
+      category: 'Entertainment',
+      nextDueDate: new Date().toISOString()
+    });
+    const subCreateRes = createMockRes();
+    await subscriptionController.createSubscription(subCreateReq, subCreateRes);
+
+    let createdSub;
+    if (subCreateRes.statusCode === 201 && subCreateRes.jsonData.success) {
+      createdSub = subCreateRes.jsonData.subscription;
+      console.log(`Success: Created subscription "${createdSub.title}" of $${createdSub.amount}`);
+    } else {
+      throw new Error(`Failed to create subscription: ${JSON.stringify(subCreateRes.jsonData)}`);
+    }
+
+    // Pay subscription
+    console.log('Paying subscription...');
+    const paySubReq = createMockReq(userId, { accountId: testAccount._id.toString() }, {}, { id: createdSub._id.toString() });
+    const paySubRes = createMockRes();
+    await subscriptionController.paySubscription(paySubReq, paySubRes);
+
+    if (paySubRes.statusCode === 200 && paySubRes.jsonData.success) {
+      const updatedSub = paySubRes.jsonData.subscription;
+      const createdExpense = paySubRes.jsonData.expense;
+      console.log(`Success: Paid subscription. Next due date advanced to: ${updatedSub.nextDueDate}`);
+      console.log(`Success: Created expense record for payment with title "${createdExpense.title}"`);
+      
+      // Verify account balance decreased by 649 (1440 - 649 = 791)
+      const afterPayAcc = await Account.findById(testAccount._id);
+      console.log(`Verified: Account balance after subscription payment is $${afterPayAcc.balance} (expected $791)`);
+      if (afterPayAcc.balance !== 791) {
+        throw new Error('Balance mismatch after subscription payment!');
+      }
+    } else {
+      throw new Error(`Failed to pay subscription: ${JSON.stringify(paySubRes.jsonData)}`);
+    }
+
+    // Delete subscription
+    console.log('Deleting subscription...');
+    const delSubReq = createMockReq(userId, {}, {}, { id: createdSub._id.toString() });
+    const delSubRes = createMockRes();
+    await subscriptionController.deleteSubscription(delSubReq, delSubRes);
+    if (delSubRes.statusCode === 200 && delSubRes.jsonData.success) {
+      console.log('Success: Subscription deleted from cloud.');
+    } else {
+      throw new Error(`Failed to delete subscription: ${JSON.stringify(delSubRes.jsonData)}`);
+    }
+
+    // 8.6. Testing Portfolio/Holdings CRUD
+    console.log('\n--- 8.6. Testing Portfolio Holdings CRUD ---');
+    const portfolioController = require('../controllers/portfolioController');
+    
+    // Add holding
+    const addHoldReq = createMockReq(userId, {
+      symbol: 'AAPL',
+      shares: 10,
+      avgPrice: 150
+    });
+    const addHoldRes = createMockRes();
+    await portfolioController.addHolding(addHoldReq, addHoldRes);
+    
+    let createdHolding;
+    if (addHoldRes.statusCode === 201) {
+      createdHolding = addHoldRes.jsonData;
+      console.log(`Success: Added holding symbol "${createdHolding.symbol}" shares: ${createdHolding.shares}`);
+    } else {
+      throw new Error(`Failed to add holding: ${JSON.stringify(addHoldRes.jsonData)}`);
+    }
+
+    // Update holding
+    const updateHoldReq = createMockReq(userId, {
+      shares: 15,
+      avgPrice: 160
+    }, {}, { id: createdHolding._id.toString() });
+    const updateHoldRes = createMockRes();
+    await portfolioController.updateHolding(updateHoldReq, updateHoldRes);
+
+    if (updateHoldRes.statusCode === 200 && updateHoldRes.jsonData.success) {
+      const updatedHolding = updateHoldRes.jsonData.holding;
+      console.log(`Success: Updated holding shares to ${updatedHolding.shares}, avgPrice: ${updatedHolding.avgPrice}`);
+      if (updatedHolding.shares !== 15 || updatedHolding.avgPrice !== 160) {
+        throw new Error('Holding fields mismatch after update!');
+      }
+    } else {
+      throw new Error(`Failed to update holding: ${JSON.stringify(updateHoldRes.jsonData)}`);
+    }
+
+    // Delete holding
+    const delHoldReq = createMockReq(userId, {}, {}, { id: createdHolding._id.toString() });
+    const delHoldRes = createMockRes();
+    await portfolioController.deleteHolding(delHoldReq, delHoldRes);
+
+    if (delHoldRes.statusCode === 200 && delHoldRes.jsonData.success) {
+      console.log('Success: Deleted holding.');
+    } else {
+      throw new Error(`Failed to delete holding: ${JSON.stringify(delHoldRes.jsonData)}`);
+    }
+
+    // 8.7. Test Expense Update (verify account balance changes)
+    console.log('\n--- 8.7. Testing Expense Update and Balance Recalculation ---');
+    const tempExpReq = createMockReq(userId, {
+      title: 'Coffee Beans',
+      amount: 100,
+      category: 'Food',
+      type: 'expense',
+      accountId: testAccount._id.toString(),
+      date: new Date().toISOString()
+    });
+    const tempExpRes = createMockRes();
+    await expenseController.addExpense(tempExpReq, tempExpRes);
+    
+    let tempExp;
+    if (tempExpRes.statusCode === 201 && tempExpRes.jsonData.success) {
+      tempExp = tempExpRes.jsonData.expense;
+      console.log(`Success: Created temp expense "${tempExp.title}" of $${tempExp.amount}`);
+      const acc1 = await Account.findById(testAccount._id);
+      console.log(`Verified account balance decreased: $${acc1.balance} (expected $691)`);
+      if (acc1.balance !== 691) {
+        throw new Error('Balance mismatch after adding temp expense!');
+      }
+    } else {
+      throw new Error('Failed to create temp expense');
+    }
+
+    // Update the expense to 40 instead of 100 (should increase balance by 60 -> 751)
+    const updateExpReq = createMockReq(userId, {
+      amount: 40,
+    }, {}, { id: tempExp._id.toString() });
+    const updateExpRes = createMockRes();
+    await expenseController.updateExpense(updateExpReq, updateExpRes);
+
+    if (updateExpRes.statusCode === 200 && updateExpRes.jsonData.success) {
+      console.log(`Success: Updated expense amount to $40`);
+      const acc2 = await Account.findById(testAccount._id);
+      console.log(`Verified: Account balance updated to $${acc2.balance} (expected $751)`);
+      if (acc2.balance !== 751) {
+        throw new Error('Balance recalculation mismatch after expense update!');
+      }
+    } else {
+      throw new Error(`Failed to update expense: ${JSON.stringify(updateExpRes.jsonData)}`);
+    }
+
+    // Delete temp expense to keep cleanup clean
+    const delTempReq = createMockReq(userId, {}, {}, { id: tempExp._id.toString() });
+    const delTempRes = createMockRes();
+    await expenseController.deleteExpense(delTempReq, delTempRes);
+    if (delTempRes.statusCode === 200) {
+      console.log('Success: Deleted temp expense.');
+      const acc3 = await Account.findById(testAccount._id);
+      console.log(`Verified account balance restored: $${acc3.balance} (expected $791)`);
+      if (acc3.balance !== 791) {
+        throw new Error('Balance mismatch after deleting temp expense!');
+      }
+    }
+
     // 9. Test Expense Deletion (balances update check)
     console.log('\n--- 9. Testing Expense Deletion ---');
     const delReq = createMockReq(userId, {}, {}, { id: createdExpenseId.toString() });
@@ -231,8 +416,8 @@ async function runTests() {
     if (delRes.statusCode === 200) {
       console.log('Success: Deleted the initial $50 expense.');
       const finalAcc = await Account.findById(testAccount._id);
-      console.log(`Verified: Final account balance updated back to $${finalAcc.balance} (expected $1490)`);
-      if (finalAcc.balance !== 1490) {
+      console.log(`Verified: Final account balance updated back to $${finalAcc.balance} (expected $841)`);
+      if (finalAcc.balance !== 841) {
         throw new Error('Balance update after delete failed!');
       }
     } else {
@@ -254,6 +439,7 @@ async function runTests() {
       await Account.deleteMany({ userId });
       await Budget.deleteMany({ userId });
       await Expense.deleteMany({ userId });
+      await Subscription.deleteMany({ userId });
       await User.deleteOne({ _id: userId });
       console.log('Cleanup completed.');
     }
