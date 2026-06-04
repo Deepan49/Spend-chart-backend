@@ -12,7 +12,18 @@ const expenseSchema = new mongoose.Schema({
   paymentMethod: { type: String },
   date: { type: Date, default: Date.now },
   isRecurring: { type: Boolean, default: false },
-  recurringFrequency: { type: String }
+  recurringFrequency: { type: String },
+  
+  // Missing fields from the frontend Transaction model
+  account: { type: String },
+  bankName: { type: String },
+  time: { type: String },
+  attachmentPath: { type: String },
+  isInvestment: { type: Boolean, default: false },
+  assetType: { type: String },
+  units: { type: Number },
+  pricePerUnit: { type: Number },
+  platform: { type: String }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Expense', expenseSchema);
