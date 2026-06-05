@@ -48,13 +48,38 @@ exports.createBudget = async (req, res) => {
   try {
     const { category, limit, period, startDate, endDate } = req.body;
     
+    const cat = category || 'All';
+    const per = period || 'monthly';
+    const sDate = startDate ? new Date(startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const eDate = endDate ? new Date(endDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
+
+    const queryStartDate = new Date(sDate);
+    queryStartDate.setHours(0, 0, 0, 0);
+
+    const existingBudget = await Budget.findOne({
+      userId: req.user.userId,
+      category: { $regex: new RegExp(`^${cat.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') },
+      period: per,
+      startDate: {
+        $gte: new Date(queryStartDate.getTime() - 12 * 60 * 60 * 1000),
+        $lte: new Date(queryStartDate.getTime() + 12 * 60 * 60 * 1000)
+      }
+    });
+
+    if (existingBudget) {
+      existingBudget.limit = limit;
+      existingBudget.endDate = eDate;
+      await existingBudget.save();
+      return res.status(200).json({ success: true, budget: existingBudget });
+    }
+
     const budget = new Budget({
       userId: req.user.userId,
-      category: category || 'All',
+      category: cat,
       limit,
-      period: period || 'monthly',
-      startDate: startDate ? new Date(startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-      endDate: endDate ? new Date(endDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59)
+      period: per,
+      startDate: sDate,
+      endDate: eDate
     });
 
     await budget.save();
