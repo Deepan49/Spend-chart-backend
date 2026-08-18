@@ -449,3 +449,164 @@ exports.confirmTransfer = async (req, res) => {
   }
 };
 
+exports.searchExpenses = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim() === '') {
+      return res.json([]);
+    }
+    const searchRegex = new RegExp(q.trim(), 'i');
+    const expenses = await Expense.find({
+      userId: req.user.userId,
+      $or: [
+        { title: searchRegex },
+        { notes: searchRegex },
+        { category: searchRegex },
+        { bankName: searchRegex },
+        { account: searchRegex }
+      ]
+    }).sort({ date: -1 });
+    res.json(expenses);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getExpensesByMonth = async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    const targetYear = parseInt(year) || new Date().getFullYear();
+    const targetMonth = parseInt(month) || (new Date().getMonth() + 1);
+
+    const startDate = new Date(targetYear, targetMonth - 1, 1);
+    const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+    const expenses = await Expense.find({
+      userId: req.user.userId,
+      date: { $gte: startDate, $lte: endDate }
+    }).sort({ date: -1 });
+
+    res.json(expenses);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getFilteredExpenses = async (req, res) => {
+  try {
+    const { category, accountId, type, paymentMethod, source } = req.query;
+    let query = { userId: req.user.userId };
+
+    if (category && category !== 'All') {
+      query.category = { $regex: new RegExp(`^${category}$`, 'i') };
+    }
+    if (accountId && accountId !== 'All') {
+      query.accountId = accountId;
+    }
+    if (type && type !== 'All') {
+      query.type = type;
+    }
+    if (paymentMethod && paymentMethod !== 'All') {
+      query.paymentMethod = { $regex: new RegExp(`^${paymentMethod}$`, 'i') };
+    }
+    if (source && source !== 'All') {
+      query.source = source;
+    }
+
+    const expenses = await Expense.find(query).sort({ date: -1 });
+    res.json(expenses);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getTransactionHistory = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const total = await Expense.countDocuments({ userId: req.user.userId });
+    const expenses = await Expense.find({ userId: req.user.userId })
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      success: true,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      total,
+      expenses
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getCategories = async (req, res) => {
+  try {
+    const userCategories = await Expense.distinct('category', { userId: req.user.userId });
+    const defaultCategories = [
+      'Food & Dining', 'Shopping', 'Bills & Utilities', 'Entertainment',
+      'Transportation', 'Health & Fitness', 'Travel', 'Education',
+      'Investment', 'Income', 'Transfer', 'Other'
+    ];
+    const categoriesSet = new Set([...defaultCategories, ...userCategories.filter(Boolean)]);
+    res.json({ success: true, categories: Array.from(categoriesSet) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.addTransfer = async (req, res) => {
+  try {
+    const { fromAccountId, toAccountId, amount, title, notes, date } = req.body;
+    if (!fromAccountId || !toAccountId) {
+      return res.status(400).json({ success: false, message: 'fromAccountId and toAccountId are required' });
+    }
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid amount is required' });
+    }
+
+    const fromAccount = await Account.findOne({ _id: fromAccountId, userId: req.user.userId });
+    const toAccount = await Account.findOne({ _id: toAccountId, userId: req.user.userId });
+
+    if (!fromAccount || !toAccount) {
+      return res.status(404).json({ success: false, message: 'One or both accounts not found' });
+    }
+
+    const transferExpense = new Expense({
+      userId: req.user.userId,
+      title: title || `Self Transfer: ${fromAccount.name} ➔ ${toAccount.name}`,
+      amount,
+      category: 'Transfer',
+      type: 'transfer',
+      source: 'manual',
+      fromAccountId,
+      toAccountId,
+      fromAccount: fromAccount.name,
+      toAccount: toAccount.name,
+      notes: notes || `Self-transfer from ${fromAccount.name} to ${toAccount.name}`,
+      date: date ? new Date(date) : new Date()
+    });
+
+    await transferExpense.save();
+
+    await Account.findOneAndUpdate(
+      { _id: fromAccountId, userId: req.user.userId },
+      { $inc: { balance: -amount } }
+    );
+
+    await Account.findOneAndUpdate(
+      { _id: toAccountId, userId: req.user.userId },
+      { $inc: { balance: amount } }
+    );
+
+    res.status(201).json({ success: true, transfer: transferExpense });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
