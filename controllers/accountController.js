@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Account = require('../models/Account');
 const Expense = require('../models/Expense');
 
@@ -33,7 +34,17 @@ exports.createAccount = async (req, res) => {
 exports.updateAccount = async (req, res) => {
   try {
     const { name, type, balance, currency, startingBalance, creditLimit, dueDate } = req.body;
-    const account = await Account.findOne({ _id: req.params.id, userId: req.user.userId });
+    let account = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      account = await Account.findOne({ _id: req.params.id, userId: req.user.userId });
+    }
+    if (!account) {
+      account = await Account.findOne({
+        userId: req.user.userId,
+        name: { $regex: new RegExp(`^${req.params.id}$`, 'i') }
+      });
+    }
+
     if (!account) {
       return res.status(404).json({ success: false, message: 'Account not found' });
     }
@@ -55,18 +66,42 @@ exports.updateAccount = async (req, res) => {
 
 exports.deleteAccount = async (req, res) => {
   try {
-    const account = await Account.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+    let account = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      account = await Account.findOne({ _id: req.params.id, userId: req.user.userId });
+    }
+    if (!account) {
+      account = await Account.findOne({
+        userId: req.user.userId,
+        name: { $regex: new RegExp(`^${req.params.id}$`, 'i') }
+      });
+    }
+
     if (!account) {
       return res.status(404).json({ success: false, message: 'Account not found' });
     }
 
-    // Unlink expenses associated with this account
-    await Expense.updateMany(
-      { accountId: req.params.id, userId: req.user.userId },
-      { $unset: { accountId: "" } }
-    );
+    // Check if there are active transactions with this account name or accountId
+    const txCount = await Expense.countDocuments({
+      userId: req.user.userId,
+      $or: [
+        { accountId: account._id },
+        { account: { $regex: new RegExp(`^${account.name}$`, 'i') } },
+        { fromAccount: { $regex: new RegExp(`^${account.name}$`, 'i') } },
+        { toAccount: { $regex: new RegExp(`^${account.name}$`, 'i') } }
+      ]
+    });
 
-    res.json({ success: true, message: 'Account deleted and associated transactions unlinked' });
+    if (txCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete account "${account.name}". It contains ${txCount} transaction(s). Please delete or reassign its transactions first.`
+      });
+    }
+
+    await Account.deleteOne({ _id: account._id, userId: req.user.userId });
+
+    res.json({ success: true, message: 'Account deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -303,7 +303,16 @@ exports.updateBudget = async (req, res) => {
 
 exports.deleteBudget = async (req, res) => {
   try {
-    const budget = await Budget.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+    let budget = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      budget = await Budget.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+    }
+    if (!budget) {
+      budget = await Budget.findOneAndDelete({ 
+        userId: req.user.userId,
+        category: { $regex: new RegExp(`^${req.params.id}$`, 'i') }
+      });
+    }
     if (!budget) {
       return res.status(404).json({ success: false, message: 'Budget not found' });
     }
