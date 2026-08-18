@@ -4,6 +4,8 @@ const expenseController = require('../controllers/expenseController');
 const auth = require('../middleware/authMiddleware');
 
 router.get('/summary', auth, expenseController.getSummary);
+router.get('/detect-transfers', auth, expenseController.detectTransferCandidates);
+router.post('/confirm-transfer', auth, expenseController.confirmTransfer);
 router.get('/', auth, expenseController.getExpenses);
 router.post('/', auth, expenseController.addExpense);
 router.post('/batch', auth, expenseController.batchAddExpenses);

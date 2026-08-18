@@ -37,11 +37,12 @@ exports.getSummary = async (req, res) => {
     const accounts = await Account.find({ userId });
     const netBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
 
-    // 2. Income and Expense Summaries within time filter
+    // 2. Income and Expense Summaries within time filter (excluding transfers)
     const transactionStats = await Expense.aggregate([
       {
         $match: {
           userId,
+          type: { $in: ['income', 'expense'] },
           date: { $gte: startDate, $lte: endDate }
         }
       },
@@ -90,7 +91,7 @@ exports.getSummary = async (req, res) => {
       .limit(5)
       .populate('accountId', 'name type');
 
-    // 5. Category Breakdown (for Spending Chart)
+    // 5. Category Breakdown (for Spending Chart - Expenses only)
     const categoryBreakdown = await Expense.aggregate([
       {
         $match: {
@@ -109,7 +110,7 @@ exports.getSummary = async (req, res) => {
       { $sort: { amount: -1 } }
     ]);
 
-    // 6. Trend Data (for Chart history)
+    // 6. Trend Data (for Chart history - Income vs Expense only)
     let groupingFormat = "%Y-%m-%d"; // Daily grouping by default
     if (filter === 'yearly') {
       groupingFormat = "%Y-%m"; // Monthly grouping for year filter
@@ -119,6 +120,7 @@ exports.getSummary = async (req, res) => {
       {
         $match: {
           userId,
+          type: { $in: ['income', 'expense'] },
           date: { $gte: startDate, $lte: endDate }
         }
       },
